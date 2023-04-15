@@ -2,9 +2,9 @@
 GPT powered personal voice assistant, immitates GLaDOS from Portal.
 
 # Installation requirements
-python modules:
+python modules (i might be missing a few, create an issue if i am):
 ```
-python pip3 install openai torch 
+pip3 install openai torch openai-whisper rhasspy-silence pvporcupine
 ```
 global variables (like in .bashrc):
 ```
