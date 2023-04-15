@@ -1,7 +1,7 @@
 # GLaDOS-GPT
 GPT powered personal voice assistant, immitates GLaDOS from Portal.
 
-# Installation requirements
+# Installation
 python modules (i might be missing a few, create an issue if i am):
 ```
 pip3 install openai torch openai-whisper rhasspy-silence pvporcupine
@@ -24,3 +24,15 @@ run
 cd GLaDOS-GPT
 ./glados.py --help
 ```
+
+# How to contribute 
+Thank you for considering contributing to our project! Here are some ways you can get involved:
+
+- Give us a star on GitHub to show your support.
+- Add problems or feature requests to our issue tracker.
+- Fork our project and make your own modifications, and submit pull requests with your changes.
+- Spread the word about our project on social media and other platforms.
+- Help us improve our documentation or fix bugs.
+- Donate to support our project, if you are able to (There will be a link if there is any interest).
+
+We appreciate any contributions, big or small, and look forward to collaborating with you!
