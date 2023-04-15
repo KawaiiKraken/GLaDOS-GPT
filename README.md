@@ -15,8 +15,12 @@ get the keys from
 - https://platform.openai.com/account/api-keys
 - https://console.picovoice.ai/
 
+download
 ```
 git clone https://github.com/KawaiiKraken/GLaDOS-GPT
+```
+run
+```
 cd GLaDOS-GPT
 ./glados.py --help
 ```
