@@ -1,0 +1,5 @@
+models/glados.pt filter=lfs diff=lfs merge=lfs -text
+models/hey-glad-os_en_linux_v2_2_0.ppn filter=lfs diff=lfs merge=lfs -text
+models/vocoder-cpu-hq.pt filter=lfs diff=lfs merge=lfs -text
+models/vocoder-cpu-lq.pt filter=lfs diff=lfs merge=lfs -text
+models/vocoder-gpu.pt filter=lfs diff=lfs merge=lfs -text
