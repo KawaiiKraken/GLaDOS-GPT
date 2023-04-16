@@ -1,6 +1,3 @@
-# WARNING: This is a dev branch!!!
-this means that the code here is likely broken, only use if you know what youre doing
-
 # GLaDOS-GPT Features
 - wake word 
 - highly accurate speech to text (with bigger whisper models)
