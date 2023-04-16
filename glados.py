@@ -40,6 +40,8 @@ def process_args():
               "  --no-voicelines     Skips all game voicelines.\n"
               "  --save              Saves the current conversation.\n"
               "  --load              Loads a saved conversation.\n"
+              "  --no-tts            Text only responses.\n"
+              "  --no-stt            Type commands instead.\n"
               "  --help | -h         Prints this message.\n")
         exit()
 
@@ -49,6 +51,8 @@ def process_args():
     global voicelines 
     global convo_save
     global convo_load 
+    global stt_enabled 
+    global tts_enabled  
     
     whisper_model = "medium"
     use_gpt = True
@@ -56,6 +60,8 @@ def process_args():
     voicelines = True
     convo_save = False
     convo_load = False
+    tts_enabled = True
+    stt_enabled = True
     
     for i, arg in enumerate(args):
         if arg == "--model":
@@ -70,6 +76,10 @@ def process_args():
             convo_save = True
         elif arg == "--load":
             convo_load = True
+        elif arg == "--no-tts":
+            tts_enabled = False
+        elif arg == "--no-stt":
+            stt_enabled = False
 
     print("Config:",
         "\n  whisper_model: " + whisper_model + ".en",
@@ -78,6 +88,8 @@ def process_args():
         "\n  voicelines: " + str(voicelines),
         "\n  convo_save: " + str(convo_save),
         "\n  convo_load: " + str(convo_load),
+        "\n  stt: " + str(stt_enabled),
+        "\n  tts: " + str(tts_enabled),
         "\n")
 
     
@@ -237,7 +249,7 @@ def tts(text):
 
 
 
-def detect_keyword(stt_model):
+def detect_keyword():
     print("\nlistening for keyword...")
     porcupine = None
     pa = None
@@ -269,7 +281,7 @@ def detect_keyword(stt_model):
             if keyword_index >= 0:
                 print("Wake-Word Detected")
                 print("conversation_loop()")
-                conversation_loop(stt_model)
+                return 
     finally:
         if porcupine is not None:
             porcupine.delete()
@@ -286,65 +298,67 @@ def detect_keyword(stt_model):
 conversation_history = "User: act as GLaDOS from portal. Be snarky and try to poke jokes at the user when possible. When refering to the User use the name Chell. Keep the responses as short as possible without breaking character."
 convo_loaded = False
 
-def conversation_loop(stt_model):
-    # Continue the conversation
-    if True:
-        try: # try loop to get a cool message on ctrl+c
-            # Get user input
-            print()
-            input_filename = "input"
+def conversation_loop(stt_model=None):
+    try: # try loop to get a cool message on ctrl+c
+        # Get user input
+        print()
+        input_filename = "input"
+        if stt_enabled == True:
             user_input = speech_to_text(stt_model, input_filename)
             print("Chell: " + user_input)
-            # user_input = "test" # text not voice
-            # selection = input("\nis this satisfactory? [y]/[n]") # text not voice
-            selection = ""
-            global confirm_input
-            if (confirm_input == True):
-                selection_filename = "selection"
-                selection = speech_to_text(stt_model, selection_filename)
-                selection = selection.lower()
-                print("\nSelection: " + selection)
-            if ( (confirm_input == False) | ("yes" in selection) | ("yeah" in selection) ):
-                # Add the user's input to the conversation history
-                global conversation_history
-                conversation_history += "\nUser: " + user_input
-                prompt = conversation_history + user_input
+        else: 
+            user_input = input("Chell: ")
+        # selection = input("\nis this satisfactory? [y]/[n]") # text not voice
+        selection = ""
+        global confirm_input
+        if (confirm_input == True):
+            selection_filename = "selection"
+            selection = speech_to_text(stt_model, selection_filename)
+            selection = selection.lower()
+            print("\nSelection: " + selection)
+        if ( (confirm_input == False) | ("yes" in selection) | ("yeah" in selection) ):
+            # Add the user's input to the conversation history
+            global conversation_history
+            conversation_history += "\nUser: " + user_input
+            prompt = conversation_history + user_input
 
-                # Generate a response based on the conversation history
-                if (use_gpt == True):
-                    full_response = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[ {"role": "system", "content": prompt} ], temperature=0, max_tokens=100)
-                    # Extract the response text from the API response
-                    message = full_response.choices[0].message.content.strip()
-                if (use_gpt == False):
-                    message = "this is a test"
+            # Generate a response based on the conversation history
+            if (use_gpt == True):
+                full_response = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[ {"role": "system", "content": prompt} ], temperature=0, max_tokens=100)
+                # Extract the response text from the API response
+                message = full_response.choices[0].message.content.strip()
+            if (use_gpt == False):
+                message = "this is a test"
 
-                # Add the response to the conversation history
-                conversation_history += "\nChatGPT: " + message
-                global convo_save
-                if convo_save == True:
-                    print("saving convo...")
-                    # save the conversation
-                    convo_file = open("saved_convo.txt", "w")
-                    convo_file.write(conversation_history)
-                    convo_file.close()
-                global convo_load, convo_loaded
-                if ((convo_load == True) & (convo_loaded == False)):
-                    convo_loaded = True
-                    print("loading convo...")
-                    convo_file = open("saved_convo.txt", "r")
-                    conversation_history = convo_file.read()
-                    convo_file.close()
+            # Add the response to the conversation history
+            conversation_history += "\nChatGPT: " + message
+            global convo_save
+            if convo_save == True:
+                print("saving convo...")
+                # save the conversation
+                convo_file = open("saved_convo.txt", "w")
+                convo_file.write(conversation_history)
+                convo_file.close()
+            global convo_load, convo_loaded
+            if ((convo_load == True) & (convo_loaded == False)):
+                convo_loaded = True
+                print("loading convo...")
+                convo_file = open("saved_convo.txt", "r")
+                conversation_history = convo_file.read()
+                convo_file.close()
 
-                print()
-                print("GLaDOS: ", message)
-                tts(message)
-            print("listening for keyword...")
-        except KeyboardInterrupt:
             print()
-            print("\nglados.goodbye()")
-            if voicelines == True:
-                os.system("mpv sounds/exit_messages/" + random.choice(os.listdir("sounds/exit_messages/")) + " --no-terminal") 
-            exit()
+            print("GLaDOS: ", message)
+            if tts_enabled == True:
+                tts(message)
+        if stt_enabled:
+            print("listening for keyword...")
+    except KeyboardInterrupt:
+        print()
+        print("\nglados.goodbye()")
+        if voicelines == True:
+            os.system("mpv sounds/exit_messages/" + random.choice(os.listdir("sounds/exit_messages/")) + " --no-terminal") 
+        exit()
 
 
 
@@ -353,12 +367,14 @@ def main():
     print("announce.powerup.init()")
     if voicelines == True:
         os.system("mpv sounds/Announcer_wakeup_powerup01.wav --no-terminal")
-    print("loading stt_model...")
-    stt_model = whisper.load_model(whisper_model + ".en")
-    print("stt_model loaded")
-    print("loading tts...")
-    load_tts()
-    print("tts loaded")
+    if stt_enabled == True:
+        print("loading stt_model...")
+        stt_model = whisper.load_model(whisper_model + ".en")
+        print("stt_model loaded")
+    if tts_enabled == True:
+        print("loading tts...")
+        load_tts()
+        print("tts loaded")
     print("announce.powerup.complete()")
     if voicelines == True:
         os.system("mpv sounds/Announcer_wakeup_powerup02.wav --no-terminal") # powerup 
@@ -366,7 +382,13 @@ def main():
     # print("glados.hello()")
     # if voicelines == True:
         # os.system("mpv sounds/welcome_messages/" + random.choice(os.listdir("sounds/welcome_messages/")) + " --no-terminal") 
-    detect_keyword(stt_model)
+    if stt_enabled == True:
+        while True:
+            detect_keyword()
+            conversation_loop(stt_model)
+    else: 
+        while True:
+            conversation_loop()
 
 
 
