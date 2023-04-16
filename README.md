@@ -22,7 +22,8 @@ git clone https://github.com/KawaiiKraken/GLaDOS-GPT
 run
 ```
 cd GLaDOS-GPT
-./glados.py --help
+./glados.py --help # to get options
+./glados.py
 ```
 
 # How to contribute 

@@ -26,6 +26,8 @@ import shlex
 import wave
 import sys
 
+
+
 def process_args():
     args = sys.argv[1:] # exclude the script name from the arguments
     
@@ -57,13 +59,13 @@ def process_args():
     return whisper_model, use_gpt, confirm_input, voicelines
 
 
+
 def prepare_gpt():
     openai.api_key = os.environ.get('OPENAI_API_KEY')
 
+    # make gpt act as glados
     conversation_history = "User: act as GLaDOS from portal. Be snarky and try to poke jokes at the user when possible. When refering to the User use words like Chell, she, you. Keep the responses as short as possible without breaking character."
     return conversation_history
-
-
 
 
 
@@ -92,18 +94,14 @@ def speech_to_text(stt_model, input_filename):
     )
 
     recorder.start()
-    # file directory
     wav_sink = 'wavs/'
     wav_dir = None
-    # file name
     wav_filename = input_filename
     if wav_sink:
         wav_sink_path = Path(wav_sink)
         if wav_sink_path.is_dir():
-            # Directory to write WAV files
             wav_dir = wav_sink_path
         else:
-            # Single WAV file to write
             wav_sink = open(wav_sink, "wb")
     voice_command: typing.Optional[VoiceCommand] = None
     audio_source = pa.open(rate=sample_rate,format=pyaudio.paInt16,channels=channels,input=True,frames_per_buffer=chunk_size)
@@ -142,7 +140,6 @@ def speech_to_text(stt_model, input_filename):
                     )
                     wav_bytes = buffer_to_wav(audio_data)
                     wav_path.write_bytes(wav_bytes)
-                    # print(wav_path)
                     print('file saved')
                     break
                 elif wav_sink:
@@ -160,13 +157,11 @@ def speech_to_text(stt_model, input_filename):
     audio = whisper.load_audio(wav_path)
     audio= whisper.pad_or_trim(audio)
     result = stt_model.transcribe(audio)
-    return result["text"]
+    return result["text"] # return transcript 
 
 
 
 def load_tts():
-    print("Initializing TTS Engine...")
-
     # Select the device
     if torch.is_vulkan_available():
         device = 'vulkan'
@@ -174,6 +169,7 @@ def load_tts():
         device = 'cuda'
     else:
         device = 'cpu'
+
     # Load models
     glados = torch.jit.load('models/glados.pt')
     vocoder = torch.jit.load('models/vocoder-gpu.pt', map_location=device)
@@ -185,6 +181,8 @@ def load_tts():
         init_vo = vocoder(init_mel)
     return glados, vocoder, device
 
+
+
 def tts(text, glados, vocoder, device):
     # Tokenize, clean and phonemize input text
     x = prepare_text(text).to('cpu')
@@ -194,13 +192,13 @@ def tts(text, glados, vocoder, device):
         # Generate generic TTS-output
         old_time = time.time()
         tts_output = glados.generate_jit(x)
-        # print("Forward Tacotron took " + str((time.time() - old_time) * 1000) + "ms")
+        # print("Forward Tacotron took " + str((time.time() - old_time) * 1000) + "ms") # debug 
 
         # Use HiFiGAN as vocoder to make output sound like GLaDOS
         old_time = time.time()
         mel = tts_output['mel_post'].to(device)
         audio = vocoder(mel)
-        # print("HiFiGAN took " + str((time.time() - old_time) * 1000) + "ms")
+        # print("HiFiGAN took " + str((time.time() - old_time) * 1000) + "ms") # debug
         
         # Normalize audio to fit in wav-file
         audio = audio.squeeze()
@@ -262,22 +260,17 @@ def detect_keyword(stt_model, conversation_history, glados, vocoder, device, use
 
 
 
-
-
-
-
 def conversation_loop(stt_model, conversation_history, glados, vocoder, device, use_gpt, confirm_input):
     # Continue the conversation
-    # while True:
     if True:
         try: # try loop to get a cool message on ctrl+c
-                # Get the user's input
+            # Get user input
             print()
             input_filename = "input"
             user_input = speech_to_text(stt_model, input_filename)
             print("Chell: " + user_input)
-            # user_input = "test"
-            # selection = input("\nis this satisfactory? [y]/[n]")
+            # user_input = "test" # text not voice
+            # selection = input("\nis this satisfactory? [y]/[n]") # text not voice
             selection = ""
             if (confirm_input == True):
                 selection_filename = "selection"
@@ -300,16 +293,14 @@ def conversation_loop(stt_model, conversation_history, glados, vocoder, device, 
                 # Add the response to the conversation history
                 conversation_history += "\nChatGPT: " + message
                 print()
-                # print(message)
-                # print(conversation_history)
                 print("GLaDOS: ", message)
                 tts(message, glados, vocoder, device)
             print("listening for keyword...")
         except KeyboardInterrupt:
             print()
             print("\nglados.goodbye()")
-            # if voicelines == True:
-                # os.system("mpv sounds/exit_messages/" + random.choice(os.listdir("sounds/exit_messages/")) + " --no-terminal") # glados hello
+            if voicelines == True:
+                os.system("mpv sounds/exit_messages/" + random.choice(os.listdir("sounds/exit_messages/")) + " --no-terminal") 
             exit()
 
 
@@ -325,7 +316,6 @@ def main():
     print("announce.powerup.init()")
     if voicelines == True:
         os.system("mpv sounds/Announcer_wakeup_powerup01.wav --no-terminal")
-    # stt_model = whisper.load_model("tiny.en")
     print("loading stt_model...")
     stt_model = whisper.load_model(whisper_model + ".en")
     print("stt_model loaded")
@@ -335,15 +325,11 @@ def main():
     print("announce.powerup.complete()")
     if voicelines == True:
         os.system("mpv sounds/Announcer_wakeup_powerup02.wav --no-terminal") # powerup 
+    # i found these to be annoying but you can enable them
     # print("glados.hello()")
     # if voicelines == True:
-        # os.system("mpv sounds/welcome_messages/" + random.choice(os.listdir("sounds/welcome_messages/")) + " --no-terminal") # glados hello
+        # os.system("mpv sounds/welcome_messages/" + random.choice(os.listdir("sounds/welcome_messages/")) + " --no-terminal") 
     detect_keyword(stt_model, conversation_history, glados, vocoder, device, use_gpt, confirm_input)
-
-
-
-
-
 
 
 
