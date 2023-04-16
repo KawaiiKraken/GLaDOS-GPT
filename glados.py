@@ -38,6 +38,8 @@ def process_args():
               "  --no-gpt            Uses 'this is a test' instead of GPT for answers.\n"
               "  --confirm           Asks to verify input (WiP).\n"
               "  --no-voicelines     Skips all game voicelines.\n"
+              "  --save              Saves the current conversation.\n"
+              "  --load              Loads a saved conversation.\n"
               "  --help | -h         Prints this message.\n")
         exit()
     
@@ -45,6 +47,8 @@ def process_args():
     use_gpt = True
     confirm_input = False
     voicelines = True
+    convo_save = False
+    convo_load = False
     
     for i, arg in enumerate(args):
         if arg == "--model":
@@ -55,17 +59,16 @@ def process_args():
             confirm_input = True
         elif arg == "--no-voicelines":
             voicelines = False
+        elif arg == "--save":
+            convo_save = True
+        elif arg == "--load":
+            convo_save = True
     
-    return whisper_model, use_gpt, confirm_input, voicelines
+    return whisper_model, use_gpt, confirm_input, voicelines, convo_save, convo_load
 
 
+openai.api_key = os.environ.get('OPENAI_API_KEY')
 
-def prepare_gpt():
-    openai.api_key = os.environ.get('OPENAI_API_KEY')
-
-    # make gpt act as glados
-    conversation_history = "User: act as GLaDOS from portal. Be snarky and try to poke jokes at the user when possible. When refering to the User use words like Chell, she, you. Keep the responses as short as possible without breaking character."
-    return conversation_history
 
 
 
@@ -215,7 +218,7 @@ def tts(text, glados, vocoder, device):
 
 
 
-def detect_keyword(stt_model, conversation_history, glados, vocoder, device, use_gpt, confirm_input):
+def detect_keyword(stt_model, glados, vocoder, device, use_gpt, confirm_input, convo_save, convo_load):
     print("\nlistening for keyword...")
     porcupine = None
     pa = None
@@ -247,7 +250,7 @@ def detect_keyword(stt_model, conversation_history, glados, vocoder, device, use
             if keyword_index >= 0:
                 print("Wake-Word Detected")
                 print("conversation_loop()")
-                conversation_loop(stt_model, conversation_history, glados, vocoder, device, use_gpt, confirm_input)
+                conversation_loop(stt_model, glados, vocoder, device, use_gpt, confirm_input, convo_save, convo_load)
     finally:
         if porcupine is not None:
             porcupine.delete()
@@ -260,7 +263,10 @@ def detect_keyword(stt_model, conversation_history, glados, vocoder, device, use
 
 
 
-def conversation_loop(stt_model, conversation_history, glados, vocoder, device, use_gpt, confirm_input):
+#make gpt act as glados
+conversation_history = "User: act as GLaDOS from portal. Be snarky and try to poke jokes at the user when possible. When refering to the User use the name Chell. Keep the responses as short as possible without breaking character."
+
+def conversation_loop(stt_model, glados, vocoder, device, use_gpt, confirm_input, convo_save, convo_load):
     # Continue the conversation
     if True:
         try: # try loop to get a cool message on ctrl+c
@@ -279,6 +285,7 @@ def conversation_loop(stt_model, conversation_history, glados, vocoder, device, 
                 print("\nSelection: " + selection)
             if ( (confirm_input == False) | ("yes" in selection) | ("yeah" in selection) ):
                 # Add the user's input to the conversation history
+                global conversation_history
                 conversation_history += "\nUser: " + user_input
                 prompt = conversation_history + user_input
 
@@ -292,6 +299,16 @@ def conversation_loop(stt_model, conversation_history, glados, vocoder, device, 
 
                 # Add the response to the conversation history
                 conversation_history += "\nChatGPT: " + message
+                if convo_save == True:
+                    # save the conversation
+                    convo_file = open("saved_convo.txt", "w")
+                    convo_file.write(conversation_history)
+                    convo_file.close()
+                if convo_load == True:
+                    convo_file = open("saved_convo.txt", "")
+                    conversation_history = convo_file.read(conversation_history)
+                    convo_file.close()
+
                 print()
                 print("GLaDOS: ", message)
                 tts(message, glados, vocoder, device)
@@ -306,13 +323,15 @@ def conversation_loop(stt_model, conversation_history, glados, vocoder, device, 
 
 
 def main():
-    whisper_model, use_gpt, confirm_input, voicelines = process_args()
+    whisper_model, use_gpt, confirm_input, voicelines, convo_save, convo_load = process_args()
     print("Config:",
           "\n  whisper_model: " + whisper_model + ".en",
           "\n  use_gpt: " + str(use_gpt),
           "\n  confirm_input: " + str(confirm_input),
-          "\n  voicelines: " + str(voicelines) + "\n")
-    conversation_history = prepare_gpt()
+          "\n  voicelines: " + str(voicelines),
+          "\n  convo_save: " + str(convo_save),
+          "\n  convo_load: " + str(convo_load),
+          "\n")
     print("announce.powerup.init()")
     if voicelines == True:
         os.system("mpv sounds/Announcer_wakeup_powerup01.wav --no-terminal")
@@ -329,7 +348,7 @@ def main():
     # print("glados.hello()")
     # if voicelines == True:
         # os.system("mpv sounds/welcome_messages/" + random.choice(os.listdir("sounds/welcome_messages/")) + " --no-terminal") 
-    detect_keyword(stt_model, conversation_history, glados, vocoder, device, use_gpt, confirm_input)
+    detect_keyword(stt_model, glados, vocoder, device, use_gpt, confirm_input, convo_save, convo_load)
 
 
 
