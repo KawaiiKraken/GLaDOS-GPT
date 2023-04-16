@@ -1,5 +1,7 @@
 # GLaDOS-GPT
 GPT powered personal voice assistant, immitates GLaDOS from Portal.
+![Oops! There should have been a video example.](example.mp4)
+
 
 # Installation
 python modules (i might be missing a few, create an issue if i am):
