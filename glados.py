@@ -34,14 +34,14 @@ def process_args():
               "Options:\n"
               "  --model [model]     Sets whisper model. Default is medium(+.en).\n"
               "  --no-gpt            Uses 'this is a test' instead of GPT for answers.\n"
-              "  --no-confirm        Skips Input verification.\n"
+              "  --confirm           Asks to verify input (WiP).\n"
               "  --no-voicelines     Skips all game voicelines.\n"
               "  --help | -h         Prints this message.\n")
         exit()
     
     whisper_model = "medium"
     use_gpt = True
-    confirm_input = True
+    confirm_input = False
     voicelines = True
     
     for i, arg in enumerate(args):
@@ -49,8 +49,8 @@ def process_args():
             whisper_model = args[i+1]
         elif arg == "--no-gpt":
             use_gpt = False
-        elif arg == "--no-confirm":
-            confirm_input = False
+        elif arg == "--confirm":
+            confirm_input = True
         elif arg == "--no-voicelines":
             voicelines = False
     
@@ -291,7 +291,7 @@ def conversation_loop(stt_model, conversation_history, glados, vocoder, device, 
 
                 # Generate a response based on the conversation history
                 if (use_gpt == True):
-                    full_response = openai.ChatCompletion.create(stt_model="gpt-3.5-turbo", messages=[ {"role": "system", "content": prompt} ], temperature=0, max_tokens=100)
+                    full_response = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[ {"role": "system", "content": prompt} ], temperature=0, max_tokens=100)
                     # Extract the response text from the API response
                     message = full_response.choices[0].message.content.strip()
                 if (use_gpt == False):
@@ -319,7 +319,8 @@ def main():
     print("Config:",
           "\n  whisper_model: " + whisper_model + ".en",
           "\n  use_gpt: " + str(use_gpt),
-          "\n  confirm_input: " + str(confirm_input))
+          "\n  confirm_input: " + str(confirm_input),
+          "\n  voicelines: " + str(voicelines) + "\n")
     conversation_history = prepare_gpt()
     print("announce.powerup.init()")
     if voicelines == True:
