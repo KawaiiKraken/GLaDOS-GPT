@@ -35,6 +35,7 @@ cd GLaDOS-GPT
 ```
 
 # Upcoming features (if there is interest)
+- persistent conversations/long term memory
 - smart home integration
 - GUI
 - automating standart computer tasks 
