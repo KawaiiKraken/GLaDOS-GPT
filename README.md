@@ -34,6 +34,14 @@ cd GLaDOS-GPT
 ./glados.py
 ```
 
+# Upcoming features (if there is interest)
+- smart home integration
+- GUI
+- automating standart computer tasks 
+- more configuration
+- more?
+
+
 # How to contribute 
 Thank you for considering contributing to our project! Here are some ways you can get involved:
 
