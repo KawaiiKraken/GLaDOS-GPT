@@ -1,5 +1,6 @@
 # WARNING: This is a dev branch!!!
 this means that the code here is likely broken, only use if you know what youre doing
+
 # GLaDOS-GPT Features
 - wake word 
 - highly accurate speech to text (with bigger whisper models)
@@ -37,6 +38,7 @@ cd GLaDOS-GPT
 ```
 
 # Upcoming features (if there is interest)
+- persistent conversations/long term memory
 - smart home integration
 - GUI
 - automating standart computer tasks 
