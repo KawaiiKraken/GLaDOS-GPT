@@ -1,5 +1,10 @@
-# GLaDOS-GPT
-GPT powered personal voice assistant, immitates GLaDOS from Portal.
+# GLaDOS-GPT Features
+- wake word 
+- highly accurate speech to text (with bigger whisper models)
+- GLaDOS voice immitation
+- sense of humor, will make mean jokes just like GLaDOS
+- real voicelines 
+- expandability - this project is open source so you can add your own modules!
 
 # Video example
 [![Oops! There should have been a video example.](thumbnail.jpg)](https://streamable.com/2ry356)
