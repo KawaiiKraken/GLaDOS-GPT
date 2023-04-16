@@ -182,6 +182,7 @@ def speech_to_text(stt_model, input_filename):
 
 
 def load_tts():
+    global glados_voice, vocoder, device
     # Select the device
     if torch.is_vulkan_available():
         device = 'vulkan'
@@ -191,19 +192,20 @@ def load_tts():
         device = 'cpu'
 
     # Load models
-    glados = torch.jit.load('models/glados.pt')
+    glados_voice = torch.jit.load('models/glados.pt')
     vocoder = torch.jit.load('models/vocoder-gpu.pt', map_location=device)
 
     # Prepare models in RAM
     for i in range(2):
-        init = glados.generate_jit(prepare_text(str(i)))
+        init = glados_voice.generate_jit(prepare_text(str(i)))
         init_mel = init['mel_post'].to(device)
         init_vo = vocoder(init_mel)
-    return glados, vocoder, device
 
 
 
-def tts(text, glados, vocoder, device):
+
+def tts(text):
+    global glados_voice, vocoder, device
     # Tokenize, clean and phonemize input text
     x = prepare_text(text).to('cpu')
 
@@ -211,7 +213,7 @@ def tts(text, glados, vocoder, device):
 
         # Generate generic TTS-output
         old_time = time.time()
-        tts_output = glados.generate_jit(x)
+        tts_output = glados_voice.generate_jit(x)
         # print("Forward Tacotron took " + str((time.time() - old_time) * 1000) + "ms") # debug 
 
         # Use HiFiGAN as vocoder to make output sound like GLaDOS
@@ -235,7 +237,7 @@ def tts(text, glados, vocoder, device):
 
 
 
-def detect_keyword(stt_model, glados, vocoder, device):
+def detect_keyword(stt_model):
     print("\nlistening for keyword...")
     porcupine = None
     pa = None
@@ -267,7 +269,7 @@ def detect_keyword(stt_model, glados, vocoder, device):
             if keyword_index >= 0:
                 print("Wake-Word Detected")
                 print("conversation_loop()")
-                conversation_loop(stt_model, glados, vocoder, device,)
+                conversation_loop(stt_model)
     finally:
         if porcupine is not None:
             porcupine.delete()
@@ -284,7 +286,7 @@ def detect_keyword(stt_model, glados, vocoder, device):
 conversation_history = "User: act as GLaDOS from portal. Be snarky and try to poke jokes at the user when possible. When refering to the User use the name Chell. Keep the responses as short as possible without breaking character."
 convo_loaded = False
 
-def conversation_loop(stt_model, glados, vocoder, device): 
+def conversation_loop(stt_model):
     # Continue the conversation
     if True:
         try: # try loop to get a cool message on ctrl+c
@@ -335,7 +337,7 @@ def conversation_loop(stt_model, glados, vocoder, device):
 
                 print()
                 print("GLaDOS: ", message)
-                tts(message, glados, vocoder, device)
+                tts(message)
             print("listening for keyword...")
         except KeyboardInterrupt:
             print()
@@ -355,7 +357,7 @@ def main():
     stt_model = whisper.load_model(whisper_model + ".en")
     print("stt_model loaded")
     print("loading tts...")
-    glados, vocoder, device = load_tts()
+    load_tts()
     print("tts loaded")
     print("announce.powerup.complete()")
     if voicelines == True:
@@ -364,7 +366,7 @@ def main():
     # print("glados.hello()")
     # if voicelines == True:
         # os.system("mpv sounds/welcome_messages/" + random.choice(os.listdir("sounds/welcome_messages/")) + " --no-terminal") 
-    detect_keyword(stt_model, glados, vocoder, device)
+    detect_keyword(stt_model)
 
 
 
