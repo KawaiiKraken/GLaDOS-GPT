@@ -55,3 +55,6 @@ Thank you for considering contributing to our project! Here are some ways you ca
 - Donate to support our project, if you are able to.
 
 We appreciate any contributions, big or small, and look forward to collaborating with you!
+
+# Credits
+glados voice - https://github.com/R2D2FISH/glados-tts
