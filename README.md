@@ -12,7 +12,7 @@
 # Installation
 python modules (i might be missing a few, create an issue if i am):
 ```
-pip3 install openai torch openai-whisper rhasspy-silence pvporcupine
+pip3 install openai torch openai-whisper rhasspy-silence pvporcupine phonemizer inflect unidecode scipy pyaudio
 ```
 global variables (like in .bashrc):
 ```
@@ -35,7 +35,7 @@ cd GLaDOS-GPT
 ```
 
 # Upcoming features (if there is interest)
-- persistent conversations/long term memory
+- ~~persistent conversations/long term memory~~ done
 - smart home integration
 - GUI
 - automating standart computer tasks 
