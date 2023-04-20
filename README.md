@@ -4,6 +4,7 @@
 - GLaDOS voice immitation
 - sense of humor, will make mean jokes just like GLaDOS
 - real voicelines 
+- lots of toggle options
 - expandability - this project is open source so you can add your own modules!
 
 # Video example
