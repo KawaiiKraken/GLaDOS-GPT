@@ -102,11 +102,28 @@ openai.api_key = os.environ.get('OPENAI_API_KEY')
 
 
 
+def buffer_to_wav(buffer: bytes) -> bytes:
+    """Wraps a buffer of raw audio data in a WAV"""
+    global sample_rate
+    rate = int(sample_rate)
+    width = int(2)
+    channels = int(1)
+ 
+    with io.BytesIO() as wav_buffer:
+        wav_file: wave.Wave_write = wave.open(wav_buffer, mode="wb")
+        with wav_file:
+            wav_file.setframerate(rate)
+            wav_file.setsampwidth(width)
+            wav_file.setnchannels(channels)
+            wav_file.writeframesraw(buffer)
+ 
+        return wav_buffer.getvalue()
 
 def speech_to_text(stt_model, input_filename):
     # if recording stops too early or late mess with vad_mode sample_rate and silence_seconds
     pa = pyaudio.PyAudio()
     vad_mode = 3
+    global sample_rate
     sample_rate = 16000
     min_seconds = 1
     max_seconds = 48
@@ -141,21 +158,6 @@ def speech_to_text(stt_model, input_filename):
     audio_source = pa.open(rate=sample_rate,format=pyaudio.paInt16,channels=channels,input=True,frames_per_buffer=chunk_size)
     audio_source.start_stream()
     print("Recording...", file=sys.stderr)
-    def buffer_to_wav(buffer: bytes) -> bytes:
-        """Wraps a buffer of raw audio data in a WAV"""
-        rate = int(sample_rate)
-        width = int(2)
-        channels = int(1)
- 
-        with io.BytesIO() as wav_buffer:
-            wav_file: wave.Wave_write = wave.open(wav_buffer, mode="wb")
-            with wav_file:
-                wav_file.setframerate(rate)
-                wav_file.setsampwidth(width)
-                wav_file.setnchannels(channels)
-                wav_file.writeframesraw(buffer)
- 
-            return wav_buffer.getvalue()
     try:
         chunk = audio_source.read(chunk_size)
         while chunk:
