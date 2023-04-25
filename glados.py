@@ -25,8 +25,10 @@ from pathlib import Path
 import shlex
 import wave
 import sys
+import nltk
 
 
+nltk.download('punkt')
 
 def process_args():
     args = sys.argv[1:] # exclude the script name from the arguments
@@ -293,6 +295,12 @@ def detect_keyword():
             pa.terminate()
 
 
+def count_tokens(text):
+    if text != None:
+        tokens = nltk.word_tokenize(text)
+        num_tokens = len(tokens)
+        return num_tokens
+
 
 #make gpt act as glados
 conversation_history = "User: act as GLaDOS from portal. Be snarky and try to poke jokes at the user when possible. When refering to the User use the name Chell. Keep the responses as short as possible without breaking character."
@@ -320,11 +328,20 @@ def conversation_loop(stt_model=None):
             # Add the user's input to the conversation history
             global conversation_history
             conversation_history += "\nUser: " + user_input
-            prompt = conversation_history + user_input
 
             # Generate a response based on the conversation history
             if (use_gpt == True):
-                full_response = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[ {"role": "system", "content": prompt} ], temperature=0, max_tokens=100)
+                prompt_tokens = count_tokens(conversation_history)
+                if prompt_tokens > 3500:
+                    conversation_history = conversation_history.split('\n')
+                    conversation_history = conversation_history[0] + '\n' + conversation_history[1] + '\n' + '\n'.join(conversation_history[-300:])
+                full_response = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    messages=[ {"role": "system", "content": conversation_history} ],
+                    temperature=0.7,
+                    max_tokens=1024,
+                    top_p=1,
+                    )
                 # Extract the response text from the API response
                 message = full_response.choices[0].message.content.strip()
             if (use_gpt == False):
