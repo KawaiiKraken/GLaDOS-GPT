@@ -13,7 +13,7 @@
 # Installation
 python modules (i might be missing a few, create an issue if i am):
 ```
-pip3 install openai torch openai-whisper rhasspy-silence pvporcupine phonemizer inflect unidecode scipy pyaudio
+pip3 install openai torch openai-whisper rhasspy-silence pvporcupine phonemizer inflect unidecode scipy pyaudio nltk
 ```
 global variables (like in .bashrc):
 ```
