@@ -26,6 +26,7 @@ import shlex
 import wave
 import sys
 import nltk
+import numpy as np
 
 
 nltk.download('punkt')
@@ -35,7 +36,7 @@ def process_args():
     
     if "--help" in args or "-h" in args:
         print("Usage: glados.py [options]\n"
-              "Options:\n"
+              "Options:\nn"
               "  --model [model]     Sets whisper model. Default is medium(+.en).\n"
               "  --no-gpt            Uses 'this is a test' instead of GPT for answers.\n"
               "  --confirm           Asks to verify input (WiP).\n"
@@ -100,8 +101,6 @@ def process_args():
 
 openai.api_key = os.environ.get('OPENAI_API_KEY')
 
-
-
 def buffer_to_wav(buffer: bytes) -> bytes:
     """Wraps a buffer of raw audio data in a WAV"""
     global sample_rate
@@ -119,7 +118,8 @@ def buffer_to_wav(buffer: bytes) -> bytes:
  
         return wav_buffer.getvalue()
 
-def speech_to_text(stt_model, input_filename):
+
+def speech_to_text(stt_model):
     # if recording stops too early or late mess with vad_mode sample_rate and silence_seconds
     pa = pyaudio.PyAudio()
     vad_mode = 3
@@ -145,15 +145,6 @@ def speech_to_text(stt_model, input_filename):
     )
 
     recorder.start()
-    wav_sink = 'wavs/'
-    wav_dir = None
-    wav_filename = input_filename
-    if wav_sink:
-        wav_sink_path = Path(wav_sink)
-        if wav_sink_path.is_dir():
-            wav_dir = wav_sink_path
-        else:
-            wav_sink = open(wav_sink, "wb")
     voice_command: typing.Optional[VoiceCommand] = None
     audio_source = pa.open(rate=sample_rate,format=pyaudio.paInt16,channels=channels,input=True,frames_per_buffer=chunk_size)
     audio_source.start_stream()
@@ -169,19 +160,8 @@ def speech_to_text(stt_model, input_filename):
                 is_timeout = voice_command.result == VoiceCommandResult.FAILURE
                 # Reset
                 audio_data = recorder.stop()
-                if wav_dir:
-                    # Write WAV to directory
-                    wav_path = (wav_dir / time.strftime(wav_filename)).with_suffix(
-                        ".wav"
-                    )
-                    wav_bytes = buffer_to_wav(audio_data)
-                    wav_path.write_bytes(wav_bytes)
-                    print('file saved')
-                    break
-                elif wav_sink:
-                    # Write to WAV file
-                    wav_bytes = core.buffer_to_wav(audio_data)
-                    wav_sink.write(wav_bytes)
+                print('file saved')
+                break
             # Next audio chunk
             chunk = audio_source.read(chunk_size)
  
@@ -190,10 +170,10 @@ def speech_to_text(stt_model, input_filename):
             audio_source.close_stream()
         except Exception:
             pass
-    audio = whisper.load_audio(wav_path)
-    audio= whisper.pad_or_trim(audio)
-    result = stt_model.transcribe(audio)
-    return result["text"] # return transcript 
+    audio = np.frombuffer(audio_data, np.int16).astype(np.float32)*(1/32768.0)
+    audio = whisper.pad_or_trim(audio)
+    transcription = stt_model.transcribe(audio)
+    return transcription["text"] # return transcript 
 
 
 
@@ -312,9 +292,8 @@ def conversation_loop(stt_model=None):
     try: # try loop to get a cool message on ctrl+c
         # Get user input
         print()
-        input_filename = "input"
         if stt_enabled == True:
-            user_input = speech_to_text(stt_model, input_filename)
+            user_input = speech_to_text(stt_model)
             print("Chell: " + user_input)
         else: 
             user_input = input("Chell: ")
@@ -370,8 +349,6 @@ def conversation_loop(stt_model=None):
             print("GLaDOS: ", message)
             if tts_enabled == True:
                 tts(message)
-        if stt_enabled:
-            print("listening for keyword...")
     except KeyboardInterrupt:
         print()
         print("\nglados.goodbye()")
