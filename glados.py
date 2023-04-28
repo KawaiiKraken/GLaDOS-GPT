@@ -100,28 +100,9 @@ def process_args():
 
 
 openai.api_key = os.environ.get('OPENAI_API_KEY')
-
-def buffer_to_wav(buffer: bytes) -> bytes:
-    """Wraps a buffer of raw audio data in a WAV"""
-    global sample_rate
-    rate = int(sample_rate)
-    width = int(2)
-    channels = int(1)
- 
-    with io.BytesIO() as wav_buffer:
-        wav_file: wave.Wave_write = wave.open(wav_buffer, mode="wb")
-        with wav_file:
-            wav_file.setframerate(rate)
-            wav_file.setsampwidth(width)
-            wav_file.setnchannels(channels)
-            wav_file.writeframesraw(buffer)
- 
-        return wav_buffer.getvalue()
-
-
+pa = pyaudio.PyAudio()
 def speech_to_text(stt_model):
     # if recording stops too early or late mess with vad_mode sample_rate and silence_seconds
-    pa = pyaudio.PyAudio()
     vad_mode = 3
     global sample_rate
     sample_rate = 16000
@@ -218,18 +199,18 @@ def tts(text):
         audio = vocoder(mel)
         # print("HiFiGAN took " + str((time.time() - old_time) * 1000) + "ms") # debug
         
-        # Normalize audio to fit in wav-file
-        audio = audio.squeeze()
-        audio = audio * 32768.0
-        audio = audio.cpu().numpy().astype('int16')
-        output_file = ('wavs/output.wav')
-        
-        # Write audio file to disk
-        # 22,05 kHz sample rate
-        write(output_file, 22050, audio)
-
         # Play audio file
-        call(["mpv", "wavs/output.wav", "--no-terminal"])
+        audio = audio.squeeze()
+        audio = audio 
+        audio = audio.cpu().numpy().astype(np.float32)
+        stream = pa.open(format=pyaudio.paFloat32,
+                         channels=1,
+                         rate=22050,
+                         output=True)
+        stream.write(audio.tostring())
+        stream.stop_stream()
+        stream.close()
+        pa.terminate()
 
 
 
@@ -246,7 +227,6 @@ def detect_keyword():
             keyword_paths=['models/hey-glad-os_en_linux_v2_2_0.ppn']
         )
 
-        pa = pyaudio.PyAudio()
 
         audio_stream = pa.open(
                         rate=porcupine.sample_rate,
@@ -378,6 +358,8 @@ def main():
     # print("glados.hello()")
     # if voicelines == True:
         # os.system("mpv sounds/welcome_messages/" + random.choice(os.listdir("sounds/welcome_messages/")) + " --no-terminal") 
+    tts("i will pronounce this entire thing, GLaDOS testing cubes!")
+    quit()
     if stt_enabled == True:
         while True:
             detect_keyword()
