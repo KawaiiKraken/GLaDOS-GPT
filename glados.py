@@ -57,7 +57,7 @@ def process_args():
     global stt_enabled 
     global tts_enabled  
     global verbose
-    global context_size
+    global max_context_size
     
     # set default options
     whisper_model = "medium" # .en is appended later
@@ -67,7 +67,7 @@ def process_args():
     tts_enabled = True
     stt_enabled = True
     verbose = False
-    context_size = 100
+    max_context_size = 100
 
     # handle args    
     for i, arg in enumerate(args):
@@ -80,7 +80,7 @@ def process_args():
                 confirm_input = True
             case "--no-voicelines":
                 voicelines = False
-            case "--save":
+            case "--no-tts":
                 tts_enabled = False
             case "--no-stt":
                 stt_enabled = False
@@ -88,7 +88,7 @@ def process_args():
                 verbose = True
             case "--context-size":
                 print("WARNING!! unusual context sizes may result in instability or context loss !!")
-                context_size = int(args[i+1])
+                max_context_size = int(args[i+1])
 
 
 
@@ -102,7 +102,7 @@ def process_args():
             "\n  stt: " + str(stt_enabled),
             "\n  tts: " + str(tts_enabled),
             "\n  verbose: " + str(verbose),
-            "\n  context_size: " + str(context_size),
+            "\n  max_context_size: " + str(max_context_size),
             "\n")
 
     
@@ -312,11 +312,18 @@ def conversation_loop(stt_model=None):
 
     # Generate a response based on the conversation history
     prompt_tokens = count_tokens(conversation_history)
-    global context_size
-    while prompt_tokens > context_size:
-        prompt_tokens = count_tokens(conversation_history)
-        conversation_history = conversation_history.split('\n')
-        conversation_history = conversation_history[0] + '\n' + conversation_history[1] + '\n' + '\n'.join(conversation_history[3:])
+    global max_context_size
+    if prompt_tokens > max_context_size:
+        while prompt_tokens > max_context_size:
+            prompt_tokens = count_tokens(conversation_history)
+            conversation_history = conversation_history.split('\n')
+            # conversation_history = conversation_history[0] + '\n' + conversation_history[1] + '\n' + '\n'.join(conversation_history[3:])
+            conversation_history = '\n'.join(conversation_history[3:])
+        print(prompt_tokens)
+        print(count_tokens(conversation_history))
+        print("compressing")
+        print(conversation_history)
+
     if use_gpt:
         full_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
