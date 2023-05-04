@@ -7,7 +7,7 @@
 - lots of toggle options
 - expandability - this project is open source so you can add your own modules!
 
-# Video example
+# Video example (Click thumbnail!)
 [![Oops! There should have been a video example.](thumbnail.jpg)](https://streamable.com/2ry356)
 
 # Installation
