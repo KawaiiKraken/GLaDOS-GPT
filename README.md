@@ -43,6 +43,8 @@ cd GLaDOS-GPT
 - more configuration
 - more?
 
+# Known issues
+- errors related to file with '.pt': this is due to git LFS to fix either install it or get the models from glados tts in the credits and the porcupine website yourself
 
 # How to contribute 
 Thank you for considering contributing to our project! Here are some ways you can get involved:
