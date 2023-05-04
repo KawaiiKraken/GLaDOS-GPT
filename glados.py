@@ -87,11 +87,8 @@ def process_args():
         elif arg == "--no-stt":
             stt_enabled = False
         elif arg == "--context-size":
+            print("WARNING!! high context sizes may result in the app crashing!!")
             context_size = int(args[i+1])
-
-    if context_size > 4000:
-        print("token limit over 4000, falling back to max.")
-        context_size = 4000
 
     print("Config:",
         "\n  whisper_model: " + whisper_model + ".en",
@@ -167,6 +164,13 @@ def speech_to_text(stt_model):
             audio_source.close_stream()
         except Exception:
             pass
+
+    # if audio_source is not None:
+        # audio_source.close()
+
+    # if pa is not None:
+        # pa.terminate()
+
     audio = np.frombuffer(audio_data, np.int16).astype(np.float32)*(1/32768.0)
     audio = whisper.pad_or_trim(audio)
     transcription = stt_model.transcribe(audio)
@@ -223,10 +227,10 @@ def tts(text):
                          channels=1,
                          rate=22050,
                          output=True)
-        stream.write(audio.tostring())
+        stream.write(audio.tobytes())
         stream.stop_stream()
         stream.close()
-        pa.terminate()
+        # pa.terminate()
 
 
 
@@ -234,6 +238,7 @@ def detect_keyword():
     print("\nlistening for keyword...")
 
     porcupine = None
+    audio_stream = None
     porcu_key = os.environ.get('PICOVOICE_KEY')
     porcupine = pvporcupine.create(
         access_key=porcu_key,
@@ -263,8 +268,8 @@ def detect_keyword():
     if audio_stream is not None:
         audio_stream.close()
 
-    if pa is not None:
-        pa.terminate()
+    # if pa is not None:
+        # pa.terminate()
 
 
 def count_tokens(text):
@@ -279,74 +284,64 @@ conversation_history = "User: act as GLaDOS from portal. Be snarky and try to po
 convo_loaded = False
 
 def conversation_loop(stt_model=None):
-    try: # try loop to get a cool message on ctrl+c
-        # Get user input
-        print()
-        if stt_enabled == True:
-            user_input = speech_to_text(stt_model)
-            print("Chell: " + user_input)
-        else: 
-            user_input = input("Chell: ")
-        selection = ""
-        global confirm_input
-        if (confirm_input == True):
-            selection_filename = "selection"
-            selection = speech_to_text(stt_model, selection_filename)
-            selection = selection.lower()
-            print("\nSelection: " + selection)
-        if ( (confirm_input == False) | ("yes" in selection) | ("yeah" in selection) ):
-            # Add the user's input to the conversation history
-            global conversation_history
-            conversation_history += "\nUser: " + user_input
+    # Get user input
+    if stt_enabled == True:
+        user_input = speech_to_text(stt_model)
+        print("\nChell: " + user_input)
+    else: 
+        user_input = input("Chell: ")
+    selection = ""
+    global confirm_input
+    if (confirm_input == True):
+        selection_filename = "selection"
+        selection = speech_to_text(stt_model, selection_filename)
+        selection = selection.lower()
+        print("\nSelection: " + selection)
+    if ( (confirm_input == False) | ("yes" in selection) | ("yeah" in selection) ):
+        # Add the user's input to the conversation history
+        global conversation_history
+        conversation_history += "\nUser: " + user_input
 
-            # Generate a response based on the conversation history
+        # Generate a response based on the conversation history
+        prompt_tokens = count_tokens(conversation_history)
+        global context_size
+        while prompt_tokens > context_size:
             prompt_tokens = count_tokens(conversation_history)
-            global context_size
-            while prompt_tokens > context_size:
-                prompt_tokens = count_tokens(conversation_history)
-                conversation_history = conversation_history.split('\n')
-                conversation_history = conversation_history[0] + '\n' + conversation_history[1] + '\n' + '\n'.join(conversation_history[3:])
-            if (use_gpt == True):
-                full_response = openai.ChatCompletion.create(
-                    model="gpt-3.5-turbo",
-                    messages=[ {"role": "system", "content": conversation_history} ],
-                    temperature=0.7,
-                    max_tokens=1024,
-                    top_p=1,
-                    )
-                # Extract the response text from the API response
-                message = full_response.choices[0].message.content.strip()
-            if (use_gpt == False):
-                message = "GPT is disabled!"
+            conversation_history = conversation_history.split('\n')
+            conversation_history = conversation_history[0] + '\n' + conversation_history[1] + '\n' + '\n'.join(conversation_history[3:])
+        if (use_gpt == True):
+            full_response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[ {"role": "system", "content": conversation_history} ],
+                temperature=0.7,
+                max_tokens=1024,
+                top_p=1,
+                )
+            # Extract the response text from the API response
+            message = full_response.choices[0].message.content.strip()
+        if (use_gpt == False):
+            message = "GPT is disabled!"
 
-            # Add the response to the conversation history
-            conversation_history += "\nChatGPT: " + message
-            global convo_save
-            if convo_save == True:
-                print("saving convo...")
-                # save the conversation
-                convo_file = open("saved_convo.txt", "w")
-                convo_file.write(conversation_history)
-                convo_file.close()
-            global convo_load, convo_loaded
-            if ((convo_load == True) & (convo_loaded == False)):
-                convo_loaded = True
-                print("loading convo...")
-                convo_file = open("saved_convo.txt", "r")
-                conversation_history = convo_file.read()
-                convo_file.close()
+        # Add the response to the conversation history
+        conversation_history += "\nChatGPT: " + message
+        global convo_save
+        if convo_save == True:
+            print("saving convo...")
+            # save the conversation
+            convo_file = open("saved_convo.txt", "w")
+            convo_file.write(conversation_history)
+            convo_file.close()
+        global convo_load, convo_loaded
+        if ((convo_load == True) & (convo_loaded == False)):
+            convo_loaded = True
+            print("loading convo...")
+            convo_file = open("saved_convo.txt", "r")
+            conversation_history = convo_file.read()
+            convo_file.close()
 
-            print()
-            print("GLaDOS: ", message)
-            if tts_enabled == True:
-                tts(message)
-    except KeyboardInterrupt:
-        print()
-        print("\nglados.goodbye()")
-        if voicelines == True:
-            os.system("mpv sounds/exit_messages/" + random.choice(os.listdir("sounds/exit_messages/")) + " --no-terminal") 
-        exit()
-
+        print("\nGLaDOS: ", message)
+        if tts_enabled == True:
+            tts(message)
 
 
 def main():
@@ -382,4 +377,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try: # try loop to get a cool message on ctrl+c
+        main()
+    except KeyboardInterrupt:
+        print("\n\nglados.goodbye()")
+        if pa != None:
+            pa.terminate()
+        if voicelines == True:
+            os.system("mpv sounds/exit_messages/" + random.choice(os.listdir("sounds/exit_messages/")) + " --no-terminal") 
+        exit()
+
