@@ -7,13 +7,13 @@
 - lots of toggle options
 - expandability - this project is open source so you can add your own modules!
 
-# Video example
+# Video example (Click thumbnail!)
 [![Oops! There should have been a video example.](thumbnail.jpg)](https://streamable.com/2ry356)
 
 # Installation
 python modules (i might be missing a few, create an issue if i am):
 ```
-pip3 install openai torch openai-whisper rhasspy-silence pvporcupine phonemizer inflect unidecode scipy pyaudio
+pip3 install openai torch openai-whisper rhasspy-silence pvporcupine phonemizer inflect unidecode scipy pyaudio nltk
 ```
 global variables (like in .bashrc):
 ```
@@ -43,6 +43,8 @@ cd GLaDOS-GPT
 - more configuration
 - more?
 
+# Known issues
+- errors related to file with '.pt': this is due to git LFS to fix either install it or get the models from glados tts in the credits and the porcupine website yourself
 
 # How to contribute 
 Thank you for considering contributing to our project! Here are some ways you can get involved:
