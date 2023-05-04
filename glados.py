@@ -45,6 +45,7 @@ def process_args():
               "  --load              Loads a saved conversation.\n"
               "  --no-tts            Text only responses.\n"
               "  --no-stt            Type commands instead.\n"
+              "  --context-size      Num of tokens to use for context.\n"
               "  --help | -h         Prints this message.\n")
         exit()
 
@@ -56,6 +57,7 @@ def process_args():
     global convo_load 
     global stt_enabled 
     global tts_enabled  
+    global context_size
     
     whisper_model = "medium"
     use_gpt = True
@@ -65,6 +67,7 @@ def process_args():
     convo_load = False
     tts_enabled = True
     stt_enabled = True
+    context_size = 100
     
     for i, arg in enumerate(args):
         if arg == "--model":
@@ -83,6 +86,12 @@ def process_args():
             tts_enabled = False
         elif arg == "--no-stt":
             stt_enabled = False
+        elif arg == "--context-size":
+            context_size = int(args[i+1])
+
+    if context_size > 4000:
+        print("token limit over 4000, falling back to max.")
+        context_size = 4000
 
     print("Config:",
         "\n  whisper_model: " + whisper_model + ".en",
@@ -93,6 +102,7 @@ def process_args():
         "\n  convo_load: " + str(convo_load),
         "\n  stt: " + str(stt_enabled),
         "\n  tts: " + str(tts_enabled),
+        "\n  context_size: " + str(context_size),
         "\n")
 
     
@@ -114,7 +124,7 @@ def speech_to_text(stt_model):
     chunk_size= 960
     skip_seconds = 0
     audio_source = None
-    channels = 1
+    num_channels = 1
     recorder = WebRtcVadRecorder(
         vad_mode=vad_mode,
         sample_rate=48000,
@@ -127,7 +137,13 @@ def speech_to_text(stt_model):
 
     recorder.start()
     voice_command: typing.Optional[VoiceCommand] = None
-    audio_source = pa.open(rate=sample_rate,format=pyaudio.paInt16,channels=channels,input=True,frames_per_buffer=chunk_size)
+    audio_source = pa.open(
+                    rate=16000,
+                    channels=1,
+                    format=pyaudio.paInt16,
+                    input=True,
+                    frames_per_buffer=chunk_size)
+
     audio_source.start_stream()
     print("Recording...", file=sys.stderr)
     try:
@@ -216,45 +232,39 @@ def tts(text):
 
 def detect_keyword():
     print("\nlistening for keyword...")
+
     porcupine = None
-    pa = None
-    audio_stream = None
+    porcu_key = os.environ.get('PICOVOICE_KEY')
+    porcupine = pvporcupine.create(
+        access_key=porcu_key,
+        keyword_paths=['models/hey-glad-os_en_linux_v2_2_0.ppn']
+    )
 
-    try:
-        porcu_key = os.environ.get('PICOVOICE_KEY')
-        porcupine = pvporcupine.create(
-            access_key=porcu_key,
-            keyword_paths=['models/hey-glad-os_en_linux_v2_2_0.ppn']
-        )
+    audio_stream = pa.open(
+                    rate=porcupine.sample_rate,
+                    channels=1,
+                    format=pyaudio.paInt16,
+                    input=True,
+                    frames_per_buffer=porcupine.frame_length)
 
+    while True:
+        pcm = audio_stream.read(porcupine.frame_length)
+        pcm = struct.unpack_from("h" * porcupine.frame_length, pcm)
 
-        audio_stream = pa.open(
-                        rate=porcupine.sample_rate,
-                        channels=1,
-                        format=pyaudio.paInt16,
-                        input=True,
-                        frames_per_buffer=porcupine.frame_length)
+        keyword_index = porcupine.process(pcm)
 
+        if keyword_index >= 0:
+            print("Wake-Word Detected")
+            print("conversation_loop()")
+            return 
+    if porcupine is not None:
+        porcupine.delete()
 
-        while True:
-            pcm = audio_stream.read(porcupine.frame_length)
-            pcm = struct.unpack_from("h" * porcupine.frame_length, pcm)
+    if audio_stream is not None:
+        audio_stream.close()
 
-            keyword_index = porcupine.process(pcm)
-
-            if keyword_index >= 0:
-                print("Wake-Word Detected")
-                print("conversation_loop()")
-                return 
-    finally:
-        if porcupine is not None:
-            porcupine.delete()
-
-        if audio_stream is not None:
-            audio_stream.close()
-
-        if pa is not None:
-            pa.terminate()
+    if pa is not None:
+        pa.terminate()
 
 
 def count_tokens(text):
@@ -277,7 +287,6 @@ def conversation_loop(stt_model=None):
             print("Chell: " + user_input)
         else: 
             user_input = input("Chell: ")
-        # selection = input("\nis this satisfactory? [y]/[n]") # text not voice
         selection = ""
         global confirm_input
         if (confirm_input == True):
@@ -291,11 +300,13 @@ def conversation_loop(stt_model=None):
             conversation_history += "\nUser: " + user_input
 
             # Generate a response based on the conversation history
-            if (use_gpt == True):
+            prompt_tokens = count_tokens(conversation_history)
+            global context_size
+            while prompt_tokens > context_size:
                 prompt_tokens = count_tokens(conversation_history)
-                if prompt_tokens > 3500:
-                    conversation_history = conversation_history.split('\n')
-                    conversation_history = conversation_history[0] + '\n' + conversation_history[1] + '\n' + '\n'.join(conversation_history[-300:])
+                conversation_history = conversation_history.split('\n')
+                conversation_history = conversation_history[0] + '\n' + conversation_history[1] + '\n' + '\n'.join(conversation_history[3:])
+            if (use_gpt == True):
                 full_response = openai.ChatCompletion.create(
                     model="gpt-3.5-turbo",
                     messages=[ {"role": "system", "content": conversation_history} ],
@@ -306,7 +317,7 @@ def conversation_loop(stt_model=None):
                 # Extract the response text from the API response
                 message = full_response.choices[0].message.content.strip()
             if (use_gpt == False):
-                message = "this is a test"
+                message = "GPT is disabled!"
 
             # Add the response to the conversation history
             conversation_history += "\nChatGPT: " + message
@@ -358,8 +369,8 @@ def main():
     # print("glados.hello()")
     # if voicelines == True:
         # os.system("mpv sounds/welcome_messages/" + random.choice(os.listdir("sounds/welcome_messages/")) + " --no-terminal") 
-    tts("i will pronounce this entire thing, GLaDOS testing cubes!")
-    quit()
+    # tts("i will pronounce this entire thing, GLaDOS testing cubes!")
+    # quit()
     if stt_enabled == True:
         while True:
             detect_keyword()
