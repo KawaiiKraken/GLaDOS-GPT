@@ -29,85 +29,86 @@ import nltk
 import numpy as np
 
 
-nltk.download('punkt')
 
 def process_args():
     args = sys.argv[1:] # exclude the script name from the arguments
     
+    # separate if case for help so its triggered first
     if "--help" in args or "-h" in args:
         print("Usage: glados.py [options]\n"
-              "Options:\nn"
+              "Options:\n"
               "  --model [model]     Sets whisper model. Default is medium(+.en).\n"
               "  --no-gpt            Uses 'this is a test' instead of GPT for answers.\n"
               "  --confirm           Asks to verify input (WiP).\n"
               "  --no-voicelines     Skips all game voicelines.\n"
-              "  --save              Saves the current conversation.\n"
-              "  --load              Loads a saved conversation.\n"
               "  --no-tts            Text only responses.\n"
               "  --no-stt            Type commands instead.\n"
               "  --context-size      Num of tokens to use for context.\n"
+              "  --verbose           Useful for debug.\n"
               "  --help | -h         Prints this message.\n")
         exit()
 
+
+    # make vars global so they dont have to be passed as an arg
     global whisper_model 
     global use_gpt 
     global confirm_input 
     global voicelines 
-    global convo_save
-    global convo_load 
     global stt_enabled 
     global tts_enabled  
+    global verbose
     global context_size
     
-    whisper_model = "medium"
+    # set default options
+    whisper_model = "medium" # .en is appended later
     use_gpt = True
     confirm_input = False
     voicelines = True
-    convo_save = False
-    convo_load = False
     tts_enabled = True
     stt_enabled = True
+    verbose = False
     context_size = 100
-    
+
+    # handle args    
     for i, arg in enumerate(args):
-        if arg == "--model":
-            whisper_model = args[i+1]
-        elif arg == "--no-gpt":
-            use_gpt = False
-        elif arg == "--confirm":
-            confirm_input = True
-        elif arg == "--no-voicelines":
-            voicelines = False
-        elif arg == "--save":
-            convo_save = True
-        elif arg == "--load":
-            convo_load = True
-        elif arg == "--no-tts":
-            tts_enabled = False
-        elif arg == "--no-stt":
-            stt_enabled = False
-        elif arg == "--context-size":
-            print("WARNING!! high context sizes may result in the app crashing!!")
-            context_size = int(args[i+1])
+        match arg:
+            case "--model":
+                whisper_model = args[i+1]
+            case "--no-gpt":
+                use_gpt = False
+            case "--confirm":
+                confirm_input = True
+            case "--no-voicelines":
+                voicelines = False
+            case "--save":
+                tts_enabled = False
+            case "--no-stt":
+                stt_enabled = False
+            case "--verbose":
+                verbose = True
+            case "--context-size":
+                print("WARNING!! unusual context sizes may result in instability or context loss !!")
+                context_size = int(args[i+1])
 
-    print("Config:",
-        "\n  whisper_model: " + whisper_model + ".en",
-        "\n  use_gpt: " + str(use_gpt),
-        "\n  confirm_input: " + str(confirm_input),
-        "\n  voicelines: " + str(voicelines),
-        "\n  convo_save: " + str(convo_save),
-        "\n  convo_load: " + str(convo_load),
-        "\n  stt: " + str(stt_enabled),
-        "\n  tts: " + str(tts_enabled),
-        "\n  context_size: " + str(context_size),
-        "\n")
+
+
+    # print set options for debug
+    if verbose:
+        print("Config:",
+            "\n  whisper_model: " + whisper_model + ".en",
+            "\n  use_gpt: " + str(use_gpt),
+            "\n  confirm_input: " + str(confirm_input),
+            "\n  voicelines: " + str(voicelines),
+            "\n  stt: " + str(stt_enabled),
+            "\n  tts: " + str(tts_enabled),
+            "\n  verbose: " + str(verbose),
+            "\n  context_size: " + str(context_size),
+            "\n")
 
     
-    return whisper_model 
 
 
 openai.api_key = os.environ.get('OPENAI_API_KEY')
-pa = pyaudio.PyAudio()
 def speech_to_text(stt_model):
     # if recording stops too early or late mess with vad_mode sample_rate and silence_seconds
     vad_mode = 3
@@ -134,6 +135,7 @@ def speech_to_text(stt_model):
 
     recorder.start()
     voice_command: typing.Optional[VoiceCommand] = None
+    global pa
     audio_source = pa.open(
                     rate=16000,
                     channels=1,
@@ -142,35 +144,26 @@ def speech_to_text(stt_model):
                     frames_per_buffer=chunk_size)
 
     audio_source.start_stream()
-    print("Recording...", file=sys.stderr)
-    try:
+    if verbose:
+        print("Recording...", file=sys.stderr)
+    chunk = audio_source.read(chunk_size)
+    
+    while chunk:
+        # Look for speech/silence
+        voice_command = recorder.process_chunk(chunk)
+ 
+        if voice_command:
+            is_timeout = voice_command.result == VoiceCommandResult.FAILURE
+            # stop recording
+            audio_data = recorder.stop()
+            if verbose:
+                print('recording saved')
+            break
+        # Next audio chunk
         chunk = audio_source.read(chunk_size)
-        while chunk:
  
-            # Look for speech/silence
-            voice_command = recorder.process_chunk(chunk)
- 
-            if voice_command:
-                is_timeout = voice_command.result == VoiceCommandResult.FAILURE
-                # Reset
-                audio_data = recorder.stop()
-                print('file saved')
-                break
-            # Next audio chunk
-            chunk = audio_source.read(chunk_size)
- 
-    finally:
-        try:
-            audio_source.close_stream()
-        except Exception:
-            pass
-
-    # if audio_source is not None:
-        # audio_source.close()
-
-    # if pa is not None:
-        # pa.terminate()
-
+    # audio_source.close_stream()
+    audio_source.close()
     audio = np.frombuffer(audio_data, np.int16).astype(np.float32)*(1/32768.0)
     audio = whisper.pad_or_trim(audio)
     transcription = stt_model.transcribe(audio)
@@ -199,6 +192,29 @@ def load_tts():
         init_vo = vocoder(init_mel)
 
 
+def play_wav_file(path):
+    global pa
+    chunk = 1024
+    # open the file for reading.
+    wf = wave.open(path, 'rb')
+    # open stream based on the wave object which has been input.
+    stream = pa.open(
+                    format =pa.get_format_from_width(wf.getsampwidth()),
+                    channels = wf.getnchannels(),
+                    rate = wf.getframerate(),
+                    output = True)
+    # read data (based on the chunk size)
+    data = wf.readframes(chunk)
+    # play stream (looping from beginning of file to the end)
+    while data:
+        # writing to the stream is what *actually* plays the sound.
+        stream.write(data)
+        data = wf.readframes(chunk)
+
+    # cleanup stuff.
+    wf.close()
+    stream.close()
+
 
 
 def tts(text):
@@ -211,18 +227,21 @@ def tts(text):
         # Generate generic TTS-output
         old_time = time.time()
         tts_output = glados_voice.generate_jit(x)
-        # print("Forward Tacotron took " + str((time.time() - old_time) * 1000) + "ms") # debug 
+        if verbose:
+            print("Forward Tacotron took " + str((time.time() - old_time) * 1000) + "ms") 
 
         # Use HiFiGAN as vocoder to make output sound like GLaDOS
         old_time = time.time()
         mel = tts_output['mel_post'].to(device)
         audio = vocoder(mel)
-        # print("HiFiGAN took " + str((time.time() - old_time) * 1000) + "ms") # debug
+        if verbose:
+            print("HiFiGAN took " + str((time.time() - old_time) * 1000) + "ms")
         
         # Play audio file
         audio = audio.squeeze()
         audio = audio 
         audio = audio.cpu().numpy().astype(np.float32)
+        global pa
         stream = pa.open(format=pyaudio.paFloat32,
                          channels=1,
                          rate=22050,
@@ -230,13 +249,13 @@ def tts(text):
         stream.write(audio.tobytes())
         stream.stop_stream()
         stream.close()
-        # pa.terminate()
 
 
 
 def detect_keyword():
     print("\nlistening for keyword...")
 
+    global pa
     porcupine = None
     audio_stream = None
     porcu_key = os.environ.get('PICOVOICE_KEY')
@@ -260,7 +279,6 @@ def detect_keyword():
 
         if keyword_index >= 0:
             print("Wake-Word Detected")
-            print("conversation_loop()")
             return 
     if porcupine is not None:
         porcupine.delete()
@@ -268,12 +286,11 @@ def detect_keyword():
     if audio_stream is not None:
         audio_stream.close()
 
-    # if pa is not None:
-        # pa.terminate()
 
 
 def count_tokens(text):
     if text != None:
+        global nltk
         tokens = nltk.word_tokenize(text)
         num_tokens = len(tokens)
         return num_tokens
@@ -281,92 +298,81 @@ def count_tokens(text):
 
 #make gpt act as glados
 conversation_history = "User: act as GLaDOS from portal. Be snarky and try to poke jokes at the user when possible. When refering to the User use the name Chell. Keep the responses as short as possible without breaking character."
-convo_loaded = False
 
 def conversation_loop(stt_model=None):
     # Get user input
-    if stt_enabled == True:
+    if stt_enabled:
         user_input = speech_to_text(stt_model)
         print("\nChell: " + user_input)
     else: 
         user_input = input("Chell: ")
-    selection = ""
-    global confirm_input
-    if (confirm_input == True):
-        selection_filename = "selection"
-        selection = speech_to_text(stt_model, selection_filename)
-        selection = selection.lower()
-        print("\nSelection: " + selection)
-    if ( (confirm_input == False) | ("yes" in selection) | ("yeah" in selection) ):
-        # Add the user's input to the conversation history
-        global conversation_history
-        conversation_history += "\nUser: " + user_input
+    # Add the user's input to the conversation history
+    global conversation_history
+    conversation_history += "\nUser: " + user_input
 
-        # Generate a response based on the conversation history
+    # Generate a response based on the conversation history
+    prompt_tokens = count_tokens(conversation_history)
+    global context_size
+    while prompt_tokens > context_size:
         prompt_tokens = count_tokens(conversation_history)
-        global context_size
-        while prompt_tokens > context_size:
-            prompt_tokens = count_tokens(conversation_history)
-            conversation_history = conversation_history.split('\n')
-            conversation_history = conversation_history[0] + '\n' + conversation_history[1] + '\n' + '\n'.join(conversation_history[3:])
-        if (use_gpt == True):
-            full_response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[ {"role": "system", "content": conversation_history} ],
-                temperature=0.7,
-                max_tokens=1024,
-                top_p=1,
-                )
-            # Extract the response text from the API response
-            message = full_response.choices[0].message.content.strip()
-        if (use_gpt == False):
-            message = "GPT is disabled!"
+        conversation_history = conversation_history.split('\n')
+        conversation_history = conversation_history[0] + '\n' + conversation_history[1] + '\n' + '\n'.join(conversation_history[3:])
+    if use_gpt:
+        full_response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[ {"role": "system", "content": conversation_history} ],
+            temperature=0.7,
+            max_tokens=1024,
+            top_p=1,
+            )
+        # Extract the response text from the API response
+        message = full_response.choices[0].message.content.strip()
+    else:
+        message = "GPT is disabled!"
 
-        # Add the response to the conversation history
-        conversation_history += "\nChatGPT: " + message
-        global convo_save
-        if convo_save == True:
-            print("saving convo...")
-            # save the conversation
-            convo_file = open("saved_convo.txt", "w")
-            convo_file.write(conversation_history)
-            convo_file.close()
-        global convo_load, convo_loaded
-        if ((convo_load == True) & (convo_loaded == False)):
-            convo_loaded = True
-            print("loading convo...")
-            convo_file = open("saved_convo.txt", "r")
-            conversation_history = convo_file.read()
-            convo_file.close()
-
-        print("\nGLaDOS: ", message)
-        if tts_enabled == True:
-            tts(message)
+    # Add the response to the conversation history
+    conversation_history += "\nChatGPT: " + message
+    print("\nGLaDOS: ", message)
+    if tts_enabled:
+        tts(message)
 
 
 def main():
-    whisper_model = process_args()
+    process_args()
+    print("pyaudio init")
+    global pa
+    pa = pyaudio.PyAudio()
+    print("getting tokenizer")
+    global nltk
+    nltk_folder_path = os.path.realpath("nltk_data/")
+    nltk.data.path.append(nltk_folder_path)
+    nltk.download('punkt', download_dir=nltk_folder_path)
     print("announce.powerup.init()")
-    if voicelines == True:
-        os.system("mpv sounds/Announcer_wakeup_powerup01.wav --no-terminal")
-    if stt_enabled == True:
+    if voicelines:
+        play_wav_file("sounds/Announcer_wakeup_powerup01.wav")
+    if stt_enabled:
         print("loading stt_model...")
+        old_time = time.time()
+        global whisper_model
         stt_model = whisper.load_model(whisper_model + ".en")
+        if verbose:
+            print("load stt_model took " + str((time.time() - old_time) * 1000) + "ms") 
         print("stt_model loaded")
-    if tts_enabled == True:
+    if tts_enabled:
         print("loading tts...")
+        old_time = time.time()
         load_tts()
+        if verbose:
+            print("load_tts took " + str((time.time() - old_time) * 1000) + "ms") 
         print("tts loaded")
     print("announce.powerup.complete()")
-    if voicelines == True:
-        os.system("mpv sounds/Announcer_wakeup_powerup02.wav --no-terminal") # powerup 
+    if voicelines:
+        play_wav_file("sounds/Announcer_wakeup_powerup02.wav")
     # i found these to be annoying but you can enable them
     # print("glados.hello()")
-    # if voicelines == True:
-        # os.system("mpv sounds/welcome_messages/" + random.choice(os.listdir("sounds/welcome_messages/")) + " --no-terminal") 
-    # tts("i will pronounce this entire thing, GLaDOS testing cubes!")
-    # quit()
-    if stt_enabled == True:
+    # if voicelines:
+        # play_wav_file("sounds/welcome_messages/" + random.choice(os.listdir("sounds/welcome_messages/")))
+    if stt_enabled:
         while True:
             detect_keyword()
             conversation_loop(stt_model)
@@ -381,9 +387,9 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\n\nglados.goodbye()")
+        if voicelines == True:
+            play_wav_file("sounds/exit_messages/" + random.choice(os.listdir("sounds/exit_messages/")))
         if pa != None:
             pa.terminate()
-        if voicelines == True:
-            os.system("mpv sounds/exit_messages/" + random.choice(os.listdir("sounds/exit_messages/")) + " --no-terminal") 
         exit()
 
