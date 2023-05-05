@@ -220,7 +220,8 @@ def play_wav_file(path):
 def tts(text):
     global glados_voice, vocoder, device
     # Tokenize, clean and phonemize input text
-    x = prepare_text(text).to('cpu')
+    # x = prepare_text(text).to('cpu')
+    x = prepare_text(text).to(device)
 
     with torch.no_grad():
 
@@ -241,6 +242,7 @@ def tts(text):
         audio = audio.squeeze()
         audio = audio 
         audio = audio.cpu().numpy().astype(np.float32)
+        # audio = audio.cpu().numpy().astype(np.float32)
         global pa
         stream = pa.open(format=pyaudio.paFloat32,
                          channels=1,
@@ -351,6 +353,7 @@ def main():
     pa = pyaudio.PyAudio()
     print("getting tokenizer")
     global nltk
+    # make nltk use a custom dir
     nltk_folder_path = os.path.realpath("nltk_data/")
     nltk.data.path.append(nltk_folder_path)
     nltk.download('punkt', download_dir=nltk_folder_path)
