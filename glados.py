@@ -27,6 +27,7 @@ import wave
 import sys
 import nltk
 import numpy as np
+import PySimpleGUI as sg
 
 
 
@@ -43,6 +44,7 @@ def process_args():
               "  --no-voicelines     Skips all game voicelines.\n"
               "  --no-tts            Text only responses.\n"
               "  --no-stt            Type commands instead.\n"
+              "  --gui               Use GUI.\n"
               "  --context-size      Num of tokens to use for context.\n"
               "  --verbose           Useful for debug.\n"
               "  --help | -h         Prints this message.\n")
@@ -58,6 +60,7 @@ def process_args():
     global tts_enabled  
     global verbose
     global max_context_size
+    global use_gui
     
     # set default options
     whisper_model = "medium" # .en is appended later
@@ -67,6 +70,7 @@ def process_args():
     tts_enabled = True
     stt_enabled = True
     verbose = False
+    use_gui = False
     max_context_size = 100
 
     # handle args    
@@ -86,6 +90,8 @@ def process_args():
                 stt_enabled = False
             case "--verbose":
                 verbose = True
+            case "--gui":
+                use_gui = True
             case "--context-size":
                 print("WARNING!! unusual context sizes may result in instability or context loss !!")
                 max_context_size = int(args[i+1])
@@ -102,14 +108,87 @@ def process_args():
             "\n  stt: " + str(stt_enabled),
             "\n  tts: " + str(tts_enabled),
             "\n  verbose: " + str(verbose),
+            "\n  use_gui: " + str(use_gui),
             "\n  max_context_size: " + str(max_context_size),
             "\n")
 
     
 
+def gui_start():
+    sg.theme('DarkAmber')
+    # All the stuff inside your window.
+    if not stt_enabled:
+        layout = [  [sg.Text('Input:', size = (72, None)), sg.Text('Output:')],
+                    [sg.Multiline(expand_y = True, size = (72, None), expand_x = False, do_not_clear = False, no_scrollbar = True, key="-INPUT_FIELD-"), sg.Multiline(expand_y = True, size = (72, None), expand_x = False, do_not_clear = False, no_scrollbar = True, key="-OUTPUT_FIELD-")],
+                    [sg.Button("Submit"), sg.Button("Clear")],
+                # lots of spaces cuz theres a bug that cuts of text
+                    [sg.StatusBar("                                                                                                                                                      ", relief = "flat", key="statusbar")]
+                ]
+    if stt_enabled:
+        layout = [  [sg.Text('Input:', size = (72, None)), sg.Text('Output:')],
+                    # [sg.Text(expand_y = True, size = (72, None), expand_x = False, key="-INPUT_FIELD-"), sg.Text(expand_y = True, size = (72, None), expand_x = False, key="-OUTPUT_FIELD-")],
+                    [sg.Multiline(expand_y = True, size = (72, None), expand_x = False, do_not_clear = False, no_scrollbar = True, disabled = True, key="-INPUT_FIELD-"), sg.Multiline(expand_y = True, size = (72, None), expand_x = False, do_not_clear = False, no_scrollbar = True, disabled = True, key="-OUTPUT_FIELD-")],
+                # lots of spaces cuz theres a bug that cuts of text
+                    [sg.StatusBar("                                                                                                                                                      ", relief = "flat", key="statusbar")]
+                ]
+
+    # Create the Window
+    global window
+    window = sg.Window('GLaDOS GUI', layout, size = (1200, 600), finalize=True)
+    window["-INPUT_FIELD-"].bind("<Control_L><Return>","CTRL_Enter-")
+    window["-INPUT_FIELD-"].bind("<Control_R><Return>","CTRL_Enter-")
+
+def gui_set_statusbar(text):
+    global window
+    window['statusbar'].update(text)
+    window.refresh()
+
+def gui_set_input(text):
+    global window
+    window['-INPUT_FIELD-'].update(text)
+    window.refresh()
+
+def gui_set_output(text):
+    global window
+    window['-OUTPUT_FIELD-'].update(text)
+    window.refresh()
+
+def gui_get_input():
+    while True:
+        event, values = window.read()
+        if event == '-INPUT_FIELD-CTRL_Enter-' or event == 'Submit':
+            user_input = values['-INPUT_FIELD-']
+            break
+        if event == 'Clear':
+            gui_set_input("")
+        # if event == values['WIN_CLOSED']:
+        # if event == values['WINDOW_CLOSE_ATTEMPTED_EVENT']:
+        if event == sg.WIN_CLOSED:
+            window.close()
+            on_exit()
+    return user_input
+
+
+
+
+# def window_close_event_handler(stop_event):
+    # global window
+    # while not stop_event.is_set():
+        # event, values = window.read()
+        # if event == sg.WIN_CLOSED or event == 'Exit': # if user closes window or clicks cancel
+            # on_exit()
+
+
+
+
+
+
+
+
+
 
 openai.api_key = os.environ.get('OPENAI_API_KEY')
-def speech_to_text(stt_model):
+def speech_to_text():
     # if recording stops too early or late mess with vad_mode sample_rate and silence_seconds
     vad_mode = 3
     global sample_rate
@@ -144,8 +223,9 @@ def speech_to_text(stt_model):
                     frames_per_buffer=chunk_size)
 
     audio_source.start_stream()
-    if verbose:
-        print("Recording...", file=sys.stderr)
+    print("Recording...", file=sys.stderr)
+    if use_gui:
+        gui_set_statusbar("Recording...")
     chunk = audio_source.read(chunk_size)
     
     while chunk:
@@ -156,8 +236,9 @@ def speech_to_text(stt_model):
             is_timeout = voice_command.result == VoiceCommandResult.FAILURE
             # stop recording
             audio_data = recorder.stop()
-            if verbose:
-                print('recording saved')
+            print('recording saved')
+            if use_gui:
+                gui_set_statusbar('recording saved')
             break
         # Next audio chunk
         chunk = audio_source.read(chunk_size)
@@ -166,6 +247,7 @@ def speech_to_text(stt_model):
     audio_source.close()
     audio = np.frombuffer(audio_data, np.int16).astype(np.float32)*(1/32768.0)
     audio = whisper.pad_or_trim(audio)
+    global stt_model
     transcription = stt_model.transcribe(audio)
     return transcription["text"] # return transcript 
 
@@ -180,6 +262,9 @@ def load_tts():
         device = 'cuda'
     else:
         device = 'cpu'
+
+    if verbose:
+        print("device: " + device)
 
     # Load models
     glados_voice = torch.jit.load('models/glados.pt')
@@ -220,8 +305,8 @@ def play_wav_file(path):
 def tts(text):
     global glados_voice, vocoder, device
     # Tokenize, clean and phonemize input text
-    # x = prepare_text(text).to('cpu')
-    x = prepare_text(text).to(device)
+    x = prepare_text(text).to('cpu')
+    # x = prepare_text(text).to(device)
 
     with torch.no_grad():
 
@@ -230,6 +315,8 @@ def tts(text):
         tts_output = glados_voice.generate_jit(x)
         if verbose:
             print("Forward Tacotron took " + str((time.time() - old_time) * 1000) + "ms") 
+            if use_gui:
+                gui_set_statusbar("Forward Tacotron took " + str((time.time() - old_time) * 1000) + "ms")
 
         # Use HiFiGAN as vocoder to make output sound like GLaDOS
         old_time = time.time()
@@ -237,6 +324,8 @@ def tts(text):
         audio = vocoder(mel)
         if verbose:
             print("HiFiGAN took " + str((time.time() - old_time) * 1000) + "ms")
+            if use_gui:
+                gui_set_statusbar("HiFiGAN took " + str((time.time() - old_time) * 1000) + "ms")
         
         # Play audio file
         audio = audio.squeeze()
@@ -256,6 +345,8 @@ def tts(text):
 
 def detect_keyword():
     print("\nlistening for keyword...")
+    if use_gui:
+        gui_set_statusbar("listening for keyword...")
 
     global pa
     porcupine = None
@@ -281,6 +372,8 @@ def detect_keyword():
 
         if keyword_index >= 0:
             print("Wake-Word Detected")
+            if use_gui:
+                gui_set_statusbar("Wake-Word Detected!")
             return 
     if porcupine is not None:
         porcupine.delete()
@@ -301,12 +394,18 @@ def count_tokens(text):
 #make gpt act as glados
 conversation_history = "User: act as GLaDOS from portal. Be snarky and try to poke jokes at the user when possible. When refering to the User use the name Chell. Keep the responses as short as possible without breaking character."
 
-def conversation_loop(stt_model=None):
+def conversation_loop():
     # Get user input
     if stt_enabled:
-        user_input = speech_to_text(stt_model)
+        user_input = speech_to_text()
         print("\nChell: " + user_input)
-    else: 
+        if use_gui:
+            gui_set_input(user_input)
+    elif use_gui:
+            gui_set_statusbar("getting input")
+            user_input = gui_get_input()
+            print("\nChell: " + user_input)
+    else:
         user_input = input("Chell: ")
     # Add the user's input to the conversation history
     global conversation_history
@@ -323,7 +422,9 @@ def conversation_loop(stt_model=None):
             conversation_history = '\n'.join(conversation_history[3:])
         print(prompt_tokens)
         print(count_tokens(conversation_history))
-        print("compressing")
+        print("exceeded token limit, compressing")
+        if use_gui:
+            gui_set_statusbar("exceeded token limit, compressing")
         print(conversation_history)
 
     if use_gpt:
@@ -342,39 +443,60 @@ def conversation_loop(stt_model=None):
     # Add the response to the conversation history
     conversation_history += "\nChatGPT: " + message
     print("\nGLaDOS: ", message)
+    if use_gui:
+        window['-OUTPUT_FIELD-'].update(message)
+        window.refresh()
     if tts_enabled:
         tts(message)
 
 
 def main():
     process_args()
+    if use_gui:
+        print("gui init")
+        gui_start()
+
     print("pyaudio init")
+    if use_gui:
+        gui_set_statusbar("pyaudio init")
     global pa
     pa = pyaudio.PyAudio()
     print("getting tokenizer")
+    if use_gui:
+        gui_set_statusbar("getting tokenizer")
     global nltk
     # make nltk use a custom dir
     nltk_folder_path = os.path.realpath("nltk_data/")
     nltk.data.path.append(nltk_folder_path)
     nltk.download('punkt', download_dir=nltk_folder_path)
     print("announce.powerup.init()")
+    if use_gui:
+        gui_set_statusbar("announce.powerup.init()")
     if voicelines:
         play_wav_file("sounds/Announcer_wakeup_powerup01.wav")
     if stt_enabled:
         print("loading stt_model...")
+        if use_gui:
+            gui_set_statusbar("loading stt_model...")
         old_time = time.time()
         global whisper_model
+        global stt_model
         stt_model = whisper.load_model(whisper_model + ".en")
-        if verbose:
-            print("load stt_model took " + str((time.time() - old_time) * 1000) + "ms") 
-        print("stt_model loaded")
+        print("stt_model loaded in " + str((time.time() - old_time) * 1000) + "ms") 
+        if use_gui:
+            gui_set_statusbar("stt_model loaded in " + str((time.time() - old_time) * 1000) + "ms")
     if tts_enabled:
         print("loading tts...")
+        if use_gui:
+            gui_set_statusbar("loading tts...")
         old_time = time.time()
         load_tts()
-        if verbose:
-            print("load_tts took " + str((time.time() - old_time) * 1000) + "ms") 
-        print("tts loaded")
+        print("tts loaded in " + str((time.time() - old_time) * 1000) + "ms") 
+        if use_gui:
+            gui_set_statusbar("tts loaded in " + str((time.time() - old_time) * 1000) + "ms")
+    print("announce.powerup.complete()")
+    if use_gui:
+        gui_set_statusbar("announce.powerup.complete()")
     print("announce.powerup.complete()")
     if voicelines:
         play_wav_file("sounds/Announcer_wakeup_powerup02.wav")
@@ -385,21 +507,28 @@ def main():
     if stt_enabled:
         while True:
             detect_keyword()
-            conversation_loop(stt_model)
+            conversation_loop()
     else: 
         while True:
             conversation_loop()
 
+
+def on_exit():
+    print("\n\nglados.goodbye()")
+    if voicelines == True:
+        play_wav_file("sounds/exit_messages/" + random.choice(os.listdir("sounds/exit_messages/")))
+    if pa != None:
+        pa.terminate()
+    if use_gui:
+        global window 
+        if window:
+            window.close()
+    exit()
 
 
 if __name__ == "__main__":
     try: # try loop to get a cool message on ctrl+c
         main()
     except KeyboardInterrupt:
-        print("\n\nglados.goodbye()")
-        if voicelines == True:
-            play_wav_file("sounds/exit_messages/" + random.choice(os.listdir("sounds/exit_messages/")))
-        if pa != None:
-            pa.terminate()
-        exit()
+        on_exit()
 
